@@ -21,17 +21,19 @@ export default function DashboardScreen({ onSelectHost, onSetup }: Props) {
     const renderHost = useCallback(({ item }: { item: HostInfo }) => (
         <TouchableOpacity style={styles.hostCard} onPress={() => onSelectHost(item)} activeOpacity={0.75}>
             <View style={styles.hostLeft}>
-                <View style={styles.onlineDot} />
+                <View style={[styles.onlineDot, !connected && { backgroundColor: '#C7C7CC' }]} />
                 <View>
                     <Text style={styles.hostId}>{item.id}</Text>
                     <Text style={styles.hostSub}>
-                        {item.relay_addr} · connected {formatAge(item.connected_at)}
+                        {connected
+                            ? `${item.relay_addr} · connected ${formatAge(item.connected_at)}`
+                            : 'Last seen · tap to reconnect'}
                     </Text>
                 </View>
             </View>
             <Text style={styles.chevron}>›</Text>
         </TouchableOpacity>
-    ), [onSelectHost]);
+    ), [onSelectHost, connected]);
 
     return (
         <View style={styles.root}>
