@@ -1,0 +1,30 @@
+[package]
+name = "relay"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+shared = { path = "../shared" }
+tokio.workspace = true
+russh.workspace = true
+russh-keys.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+env_logger.workspace = true
+clap.workspace = true
+futures.workspace = true
+async-trait = "0.1.89"
+log = "0.4.29"
+sha2 = "0.10.9"
+hex = "0.4.3"
+axum = { version = "0.8.8", features = ["ws"] }
+tower = "0.5.3"
+tower-http = "0.6.8"
+tokio-tungstenite = "0.28.0"
+serde_json = "1.0.149"
+uuid = { version = "1.22.0", features = ["v4"] }
+base64 = "0.22.1"
+qrcode = "0.14.1"
+image = "0.25.9"
+serde = { workspace = true, features = ["derive"] }

@@ -1,0 +1,23 @@
+[package]
+name = "host"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+shared = { path = "../shared" }
+tokio.workspace = true
+russh.workspace = true
+russh-keys.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+clap.workspace = true
+futures.workspace = true
+portable-pty = "0.8"
+log = "0.4.29"
+env_logger.workspace = true
+async-trait = "0.1.89"
+sha2 = "0.10.9"
+hex = "0.4.3"
+qrcode = "0.14.1"
+image = "0.25.9"

@@ -1,0 +1,19 @@
+# Rust artifacts
+target/
+
+# Node / Expo
+app/node_modules/
+app/.expo/
+app/dist/
+
+# Keys (never commit private keys)
+*.key
+*.pem
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env
+.env
+*.env.local
