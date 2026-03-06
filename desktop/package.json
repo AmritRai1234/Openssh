@@ -1,0 +1,54 @@
+{
+    "name": "openssh-desktop",
+    "version": "1.0.0",
+    "description": "OpenSSH Desktop — SSH into any machine from your desktop",
+    "main": "main.js",
+    "scripts": {
+        "start": "electron .",
+        "build": "electron-builder",
+        "build:linux": "electron-builder --linux",
+        "build:mac": "electron-builder --mac",
+        "build:win": "electron-builder --win"
+    },
+    "build": {
+        "appId": "com.amritrai.openssh",
+        "productName": "OpenSSH",
+        "directories": {
+            "output": "dist"
+        },
+        "files": [
+            "main.js",
+            "src/**/*",
+            "node_modules/**/*"
+        ],
+        "linux": {
+            "target": [
+                "AppImage",
+                "deb"
+            ],
+            "category": "Network"
+        },
+        "mac": {
+            "target": [
+                "dmg"
+            ],
+            "category": "public.app-category.utilities"
+        },
+        "win": {
+            "target": [
+                "nsis"
+            ],
+            "icon": "src/assets/icon.png"
+        },
+        "icon": "src/assets/icon.png"
+    },
+    "dependencies": {
+        "@xterm/xterm": "^5.5.0",
+        "@xterm/addon-fit": "^0.10.0",
+        "@xterm/addon-web-links": "^0.11.0"
+    },
+    "devDependencies": {
+        "electron": "^33.0.0",
+        "electron-builder": "^25.0.0"
+    }
+}

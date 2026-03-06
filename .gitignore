@@ -1,10 +1,12 @@
 # Rust artifacts
 target/
 
-# Node / Expo
+# Node / Expo / Desktop
 app/node_modules/
 app/.expo/
 app/dist/
+desktop/node_modules/
+desktop/dist/
 
 # Keys (never commit private keys)
 *.key

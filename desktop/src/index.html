@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>OpenSSH</title>
+<link rel="stylesheet" href="styles.css" />
+<link rel="stylesheet" href="../node_modules/@xterm/xterm/css/xterm.css" />
+</head>
+<body>
+
+<!-- ── Setup Screen ────────────────────────────────────── -->
+<div id="screen-setup" class="screen">
+  <div class="setup-card">
+    <div class="logo-ring">
+      <img src="assets/icon.png" class="logo-img" alt="OpenSSH" />
+    </div>
+    <h1>OpenSSH</h1>
+    <p class="subtitle">Connect to your relay server</p>
+    <div class="field">
+      <label>Relay URL</label>
+      <input id="setup-url" type="text" placeholder="http://1.2.3.4:8080" autocomplete="off" spellcheck="false" />
+    </div>
+    <div class="field">
+      <label>API Token</label>
+      <input id="setup-token" type="password" placeholder="Paste token from relay log" autocomplete="off" />
+    </div>
+    <button id="setup-save" class="btn-primary">Connect & Save</button>
+    <p id="setup-error" class="error-text"></p>
+  </div>
+</div>
+
+<!-- ── Dashboard Screen ───────────────────────────────── -->
+<div id="screen-dashboard" class="screen hidden">
+  <div class="titlebar">
+    <div class="titlebar-left">
+      <span class="app-title">OpenSSH</span>
+      <span class="relay-dot" id="relay-dot"></span>
+      <span class="relay-label" id="relay-label">Connecting...</span>
+    </div>
+    <div class="titlebar-right">
+      <button id="dash-gift" class="icon-btn" title="Support on Ko-fi">♥</button>
+      <button id="dash-settings" class="icon-btn" title="Settings">⚙</button>
+    </div>
+  </div>
+
+  <div class="section-header">
+    <span class="section-title">Connected Machines</span>
+    <span id="host-count" class="host-count">0 online</span>
+  </div>
+
+  <div id="host-list" class="host-list"></div>
+
+  <div id="empty-state" class="empty-state hidden">
+    <div class="empty-icon">🖥</div>
+    <h2>No machines online</h2>
+    <p>Start the host daemon on your machine and it'll appear here</p>
+    <code>./openssh-host my-laptop --relay &lt;relay-address&gt;</code>
+  </div>
+</div>
+
+<!-- ── Terminal Screen ────────────────────────────────── -->
+<div id="screen-terminal" class="screen hidden">
+  <div class="term-titlebar">
+    <button id="term-back" class="back-btn">‹</button>
+    <div class="term-title-row">
+      <span class="term-dot" id="term-dot"></span>
+      <span id="term-host-name" class="term-host"></span>
+    </div>
+    <button id="term-reconnect" class="reconnect-btn hidden">↺ Retry</button>
+  </div>
+  <div id="terminal-container"></div>
+</div>
+
+<script src="../node_modules/@xterm/xterm/lib/xterm.js"></script>
+<script src="../node_modules/@xterm/addon-fit/lib/addon-fit.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
