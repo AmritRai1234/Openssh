@@ -335,6 +335,19 @@ fn generate_qr_png_b64(data: &str) -> String {
     }
 }
 
+/// GET /api/setup-qr — returns QR code PNG (base64) encoding relayUrl + token for phone setup.
+/// No auth required — the QR itself is the secret (contains the token).
+async fn api_setup_qr(State(state): State<AppState>) -> Response {
+    // Encode: "openssh://<relay_addr>?token=<token>"
+    let payload = format!("openssh://{}?token={}", state.relay_addr, state.api_token);
+    let qr_b64 = generate_qr_png_b64(&payload);
+    Json(json!({
+        "qr_png_base64": qr_b64,
+        "relay_url": format!("http://{}", state.relay_addr),
+        "token": state.api_token,
+    })).into_response()
+}
+
 /// GET /api/status
 async fn api_status(headers: HeaderMap, State(state): State<AppState>) -> Response {
     if !check_token(&headers, &state.api_token) {
@@ -554,6 +567,7 @@ async fn main() -> Result<()> {
 
     // ── Axum HTTP API ─────────────────────────────────────
     let api_app = Router::new()
+        .route("/api/setup-qr", get(api_setup_qr))
         .route("/api/status", get(api_status))
         .route("/api/hosts", get(api_hosts))
         .route("/api/host/{id}/pair", get(api_host_pair))

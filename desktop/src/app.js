@@ -69,9 +69,38 @@ document.getElementById('dash-settings').addEventListener('click', () => {
     showScreen('setup');
 });
 document.getElementById('dash-gift').addEventListener('click', () => {
-    // Replace with your Ko-fi URL
     require('electron').shell?.openExternal('https://ko-fi.com');
 });
+document.getElementById('dash-pair').addEventListener('click', showQrModal);
+document.getElementById('qr-close').addEventListener('click', () => {
+    document.getElementById('qr-modal').classList.add('hidden');
+});
+
+async function showQrModal() {
+    const modal = document.getElementById('qr-modal');
+    const loading = document.getElementById('qr-loading');
+    const img = document.getElementById('qr-img');
+    const details = document.getElementById('qr-details');
+    // Reset
+    loading.classList.remove('hidden');
+    img.classList.add('hidden');
+    details.classList.add('hidden');
+    modal.classList.remove('hidden');
+
+    try {
+        const r = await fetch(`${relayUrl}/api/setup-qr`);
+        if (!r.ok) throw new Error('relay returned ' + r.status);
+        const data = await r.json();
+        img.src = `data:image/png;base64,${data.qr_png_base64}`;
+        document.getElementById('qr-url').textContent = data.relay_url;
+        document.getElementById('qr-token').textContent = data.token;
+        loading.classList.add('hidden');
+        img.classList.remove('hidden');
+        details.classList.remove('hidden');
+    } catch (e) {
+        loading.textContent = `Error: ${e.message}`;
+    }
+}
 
 async function loadHosts() {
     try {
