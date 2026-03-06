@@ -205,15 +205,24 @@ async fn handle_pty_shell(channel: Channel<russh::client::Msg>) {
         Ok(p) => p,
         Err(e) => { error!("openpty failed: {}", e); return; }
     };
-    let mut cmd = CommandBuilder::new("bash");
-    // Suppress ANSI colour codes — our terminal strips them client-side too,
-    // but setting TERM=dumb / NO_COLOR prevents bash, ls, etc. from emitting
-    // them in the first place, which is much cleaner.
-    cmd.env("TERM", "dumb");
-    cmd.env("NO_COLOR", "1");
-    cmd.env("LS_COLORS", "");
+    #[cfg(target_os = "windows")]
+    let mut cmd = {
+        let mut c = CommandBuilder::new("cmd.exe");
+        c.arg("/K"); // keep cmd open after each command
+        c
+    };
+    #[cfg(not(target_os = "windows"))]
+    let mut cmd = {
+        let mut c = CommandBuilder::new("bash");
+        // Suppress ANSI colour codes — our terminal strips them client-side,
+        // but TERM=dumb / NO_COLOR stops bash/ls emitting them in the first place.
+        c.env("TERM", "dumb");
+        c.env("NO_COLOR", "1");
+        c.env("LS_COLORS", "");
+        c
+    };
     if let Err(e) = pair.slave.spawn_command(cmd) {
-        error!("Spawn bash failed: {}", e);
+        error!("Spawn shell failed: {}", e);
         return;
     }
     drop(pair.slave);

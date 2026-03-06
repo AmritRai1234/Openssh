@@ -1,0 +1,142 @@
+name: Build Releases
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build-host:
+    name: Build host (${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            artifact: openssh-host-linux-x64
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            artifact: openssh-host-macos-x64
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            artifact: openssh-host-macos-arm64
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact: openssh-host-windows-x64.exe
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build host
+        run: cargo build --release -p host --target ${{ matrix.target }}
+
+      - name: Rename binary (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          cp target/${{ matrix.target }}/release/host ${{ matrix.artifact }}
+
+      - name: Rename binary (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          copy target\${{ matrix.target }}\release\host.exe ${{ matrix.artifact }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.artifact }}
+
+  build-relay:
+    name: Build relay (${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            artifact: openssh-relay-linux-x64
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            artifact: openssh-relay-macos-x64
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            artifact: openssh-relay-macos-arm64
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact: openssh-relay-windows-x64.exe
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build relay
+        run: cargo build --release -p relay --target ${{ matrix.target }}
+
+      - name: Rename binary (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          cp target/${{ matrix.target }}/release/relay ${{ matrix.artifact }}
+
+      - name: Rename binary (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          copy target\${{ matrix.target }}\release\relay.exe ${{ matrix.artifact }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.artifact }}
+
+  release:
+    name: Create GitHub Release
+    needs: [build-host, build-relay]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./dist
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: OpenSSH ${{ github.ref_name }}
+          body: |
+            ## OpenSSH ${{ github.ref_name }}
+
+            ### Download
+
+            | Platform | Host Daemon | Relay Server |
+            |---|---|---|
+            | Linux x64 | [openssh-host-linux-x64](./openssh-host-linux-x64/openssh-host-linux-x64) | [openssh-relay-linux-x64](./openssh-relay-linux-x64/openssh-relay-linux-x64) |
+            | macOS x64 | [openssh-host-macos-x64](./openssh-host-macos-x64/openssh-host-macos-x64) | [openssh-relay-macos-x64](./openssh-relay-macos-x64/openssh-relay-macos-x64) |
+            | macOS ARM | [openssh-host-macos-arm64](./openssh-host-macos-arm64/openssh-host-macos-arm64) | [openssh-relay-macos-arm64](./openssh-relay-macos-arm64/openssh-relay-macos-arm64) |
+            | Windows x64 | [openssh-host-windows-x64.exe](./openssh-host-windows-x64.exe/openssh-host-windows-x64.exe) | [openssh-relay-windows-x64.exe](./openssh-relay-windows-x64.exe/openssh-relay-windows-x64.exe) |
+
+            See the [README](https://github.com/AmritRai1234/Openssh#readme) for setup instructions.
+          files: |
+            dist/**/*
