@@ -81,19 +81,26 @@ async function showQrModal() {
     const loading = document.getElementById('qr-loading');
     const img = document.getElementById('qr-img');
     const details = document.getElementById('qr-details');
-    // Reset
+
+    // Reset state
     loading.classList.remove('hidden');
+    loading.textContent = 'Generating QR...';
     img.classList.add('hidden');
     details.classList.add('hidden');
     modal.classList.remove('hidden');
 
     try {
-        const r = await fetch(`${relayUrl}/api/setup-qr`);
-        if (!r.ok) throw new Error('relay returned ' + r.status);
-        const data = await r.json();
-        img.src = `data:image/png;base64,${data.qr_png_base64}`;
-        document.getElementById('qr-url').textContent = data.relay_url;
-        document.getElementById('qr-token').textContent = data.token;
+        // Generate QR directly from saved config — no relay API call needed
+        const QRCode = require('qrcode');
+        const payload = `russh-api://url=${relayUrl}&token=${relayToken}`;
+        const dataUrl = await QRCode.toDataURL(payload, {
+            width: 280,
+            margin: 2,
+            color: { dark: '#1C1C1E', light: '#FFFFFF' },
+        });
+        img.src = dataUrl;
+        document.getElementById('qr-url').textContent = relayUrl;
+        document.getElementById('qr-token').textContent = relayToken;
         loading.classList.add('hidden');
         img.classList.remove('hidden');
         details.classList.remove('hidden');

@@ -4,7 +4,7 @@
     "description": "OpenSSH Desktop — SSH into any machine from your desktop",
     "main": "main.js",
     "scripts": {
-        "start": "electron .",
+        "start": "electron . --no-sandbox",
         "build": "electron-builder",
         "build:linux": "electron-builder --linux",
         "build:mac": "electron-builder --mac",
@@ -43,12 +43,13 @@
         "icon": "src/assets/icon.png"
     },
     "dependencies": {
-        "@xterm/xterm": "^5.5.0",
         "@xterm/addon-fit": "^0.10.0",
-        "@xterm/addon-web-links": "^0.11.0"
+        "@xterm/addon-web-links": "^0.11.0",
+        "@xterm/xterm": "^5.5.0",
+        "qrcode": "^1.5.4"
     },
     "devDependencies": {
-        "electron": "^33.0.0",
-        "electron-builder": "^25.0.0"
+        "electron": "^40.8.0",
+        "electron-builder": "^26.8.1"
     }
 }
