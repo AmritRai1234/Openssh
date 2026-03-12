@@ -3,7 +3,7 @@ services:
     build: .
     restart: unless-stopped
     ports:
-      - "8080:8080" # HTTP API (app connects here)
+      - "9090:8080" # HTTP API (app connects here)
       - "2222:2222" # SSH relay (host daemons connect here)
     volumes:
       - relay-data:/data
