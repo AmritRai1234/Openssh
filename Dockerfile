@@ -18,6 +18,7 @@ FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/*
 WORKDIR /data
 COPY --from=builder /app/target/release/relay /usr/local/bin/relay
+COPY website/ /website/
 
 # 8080 = HTTP API   |   2222 = SSH relay tunnel
 EXPOSE 8080 2222

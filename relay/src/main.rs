@@ -2,6 +2,7 @@ mod db;
 
 use anyhow::Result;
 use async_trait::async_trait;
+use tower_http::services::ServeDir;
 use axum::{
     extract::{Path, Query, State},
     extract::ws::{Message, WebSocket, WebSocketUpgrade},
@@ -809,7 +810,8 @@ async fn main() -> Result<()> {
         .route("/api/host/{id}/pair", get(api_host_pair))
         .route("/api/events", get(api_events))
         .route("/api/terminal/{id}", get(api_terminal))
-        .with_state(app_state.clone());
+        .with_state(app_state.clone())
+        .fallback_service(ServeDir::new("/website"));
 
     let api_addr: SocketAddr = cli.api_bind.parse()?;
     info!("API listening on http://{}", api_addr);
