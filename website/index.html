@@ -119,7 +119,7 @@
             <div class="arch-node arch-relay">
                 <div class="arch-icon"><i data-lucide="cloud" class="lucide-lg"></i></div>
                 <div class="arch-label">Relay</div>
-                <div class="arch-detail">$5/mo VPS</div>
+                <div class="arch-detail">Hosted or self-hosted</div>
             </div>
             <div class="arch-arrow">
                 <div class="arch-arrow-line"></div>
@@ -174,17 +174,17 @@
     <!-- Pricing -->
     <section id="pricing" class="section">
         <h2 class="section-title">Simple Pricing</h2>
-        <p class="section-sub">Self-host for free, or let us handle the relay.</p>
+        <p class="section-sub">Self-host for free, or use our relay and support the project.</p>
         <div class="pricing-grid">
             <div class="pricing-card">
-                <div class="pricing-badge">Open Source</div>
+                <div class="pricing-badge">Self-Hosted</div>
                 <div class="pricing-price">$0</div>
                 <div class="pricing-period">forever</div>
                 <ul class="pricing-features">
                     <li>✓ Full source code</li>
-                    <li>✓ Self-hosted relay</li>
+                    <li>✓ Run your own relay</li>
                     <li>✓ Unlimited hosts</li>
-                    <li>✓ All terminal features</li>
+                    <li>✓ All features included</li>
                     <li>✓ Community support</li>
                 </ul>
                 <a href="https://github.com/AmritRai1234/Openssh" class="btn btn-secondary pricing-btn">View on
@@ -192,15 +192,15 @@
             </div>
             <div class="pricing-card pricing-featured">
                 <div class="pricing-badge">Hosted Relay</div>
-                <div class="pricing-price">$5</div>
-                <div class="pricing-period">per month</div>
+                <div class="pricing-price">☕</div>
+                <div class="pricing-period">pay what you want</div>
                 <ul class="pricing-features">
-                    <li>✓ Managed relay server</li>
+                    <li>✓ We handle the infrastructure</li>
                     <li>✓ No VPS needed</li>
-                    <li>✓ Up to 10 hosts</li>
-                    <li>✓ 99.9% uptime</li>
-                    <li>✓ Priority support</li>
-                    <li>✓ QR code instant setup</li>
+                    <li>✓ Instant QR code setup</li>
+                    <li>✓ Up to 3 hosts (free tier)</li>
+                    <li>✓ Support the project</li>
+                    <li>✓ Priority support for donors</li>
                 </ul>
                 <a href="https://ko-fi.com/openssh" class="btn btn-primary pricing-btn" target="_blank">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -218,28 +218,36 @@
 
     <!-- Quick Install -->
     <section class="section install-section">
-        <h2 class="section-title">Install in 30 Seconds</h2>
+        <h2 class="section-title">Get Started in 30 Seconds</h2>
         <div class="install-card">
+            <div class="install-step">
+                <span class="step-num"><i data-lucide="smartphone" style="width:18px;height:18px"></i></span>
+                <div>
+                    <div class="step-title">Download the app</div>
+                    <p class="step-desc">Install the OpenSSH app on your phone and create an account.</p>
+                </div>
+            </div>
             <div class="install-step">
                 <span class="step-num"><i data-lucide="download" style="width:18px;height:18px"></i></span>
                 <div>
-                    <div class="step-title">Install the host daemon</div>
+                    <div class="step-title">Install the host daemon on your PC</div>
                     <code
-                        class="step-code">curl -fsSL https://raw.githubusercontent.com/AmritRai1234/Openssh/main/install.sh | bash -s -- --relay your-relay:2222</code>
+                        class="step-code">curl -fsSL https://raw.githubusercontent.com/AmritRai1234/Openssh/main/install.sh | bash -s -- --relay relay.openssh.ca:2222</code>
                 </div>
             </div>
             <div class="install-step">
                 <span class="step-num"><i data-lucide="scan" style="width:18px;height:18px"></i></span>
                 <div>
                     <div class="step-title">Scan the QR code</div>
-                    <p class="step-desc">Open the app, scan the QR code printed on startup, and you're connected.</p>
+                    <p class="step-desc">The daemon prints a QR code. Scan it with the app to pair your PC — done.</p>
                 </div>
             </div>
             <div class="install-step">
                 <span class="step-num"><i data-lucide="terminal" style="width:18px;height:18px"></i></span>
                 <div>
-                    <div class="step-title">Start SSHing</div>
-                    <p class="step-desc">Tap your machine in the dashboard and start running commands from anywhere.</p>
+                    <div class="step-title">SSH from anywhere</div>
+                    <p class="step-desc">Tap your machine in the dashboard. Full terminal, file browser — all from your
+                        phone.</p>
                 </div>
             </div>
         </div>
