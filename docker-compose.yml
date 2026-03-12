@@ -2,10 +2,9 @@ services:
   relay:
     build: .
     restart: unless-stopped
-    expose:
-      - "8080"
     ports:
-      - "2222:2222" # SSH relay (host daemons connect here)
+      - "9090:8080"
+      - "2222:2222"
     volumes:
       - relay-data:/data
     environment:
@@ -16,20 +15,5 @@ services:
       timeout: 5s
       retries: 3
 
-  caddy:
-    image: caddy:2-alpine
-    restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile
-      - caddy-data:/data
-      - caddy-config:/config
-    depends_on:
-      - relay
-
 volumes:
   relay-data:
-  caddy-data:
-  caddy-config:
