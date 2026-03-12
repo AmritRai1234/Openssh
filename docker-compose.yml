@@ -5,6 +5,12 @@ services:
     ports:
       - "9090:8080" # HTTP API (app connects here)
       - "2222:2222" # SSH relay (host daemons connect here)
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.relay.rule=Host(`openssh.ca`)"
+      - "traefik.http.routers.relay.entrypoints=http,https"
+      - "traefik.http.routers.relay.tls.certresolver=letsencrypt"
+      - "traefik.http.services.relay.loadbalancer.server.port=8080"
     volumes:
       - relay-data:/data
     environment:
