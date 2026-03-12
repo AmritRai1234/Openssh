@@ -1,169 +1,98 @@
-# OpenSSH — Mobile SSH Terminal
+# OpenSSH.ca — SSH From Anywhere
 
-> SSH into any machine from your phone — no port forwarding, no VPN needed.
+> SSH into any machine from your phone or browser — no port forwarding, no VPN.
 
-[![Ko-fi](https://img.shields.io/badge/Support%20on-Ko--fi-FF5E5B?logo=ko-fi&logoColor=white)](https://ko-fi.com/YOUR_NAME)
+[![Website](https://img.shields.io/badge/Website-openssh.ca-000?style=for-the-badge)](https://openssh.ca)
+[![Ko-fi](https://img.shields.io/badge/Support-Ko--fi-FF5E5B?style=for-the-badge&logo=ko-fi&logoColor=white)](https://ko-fi.com/openssh)
+[![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)](LICENSE)
 
 ---
 
 ## What is this?
 
-OpenSSH is a mobile terminal app (Android/iOS) that lets you run commands on your home PC or server from your phone, even when you're on a completely different network.
-
-Most SSH apps require you to open a port on your router or set up a VPN. **OpenSSH doesn't.** Instead, your machine connects *outward* to a relay server — your phone then connects through the relay from anywhere.
+OpenSSH.ca lets you control any machine from anywhere — phone, tablet, or browser. Your PC connects *outward* to a relay server, and you connect through it. **No port forwarding, no VPN, no firewall rules.**
 
 ```
-📱 Phone (any network)  ──────────┐
-                                  ▼
-                         ☁️  Relay Server  (VPS)
-                                  ▲
-🖥️  Home PC (behind router) ──────┘
-       (no port forwarding needed)
+📱 Phone / 🌐 Browser ──────────┐
+                                 ▼
+                        ☁️  Relay Server
+                                 ▲
+🖥️  Your PC (behind any firewall) ─┘
+         (connects outward — no ports to open)
 ```
+
+### Use it from:
+- **📱 Mobile app** — Android APK (iOS coming soon)
+- **🌐 Web terminal** — `openssh.ca/dashboard.html` — no install needed
+- **🖥️ Self-hosted** — run your own relay for free
+
+---
+
+## Quick Start
+
+### 1. Create an account
+
+Visit [openssh.ca/dashboard.html](https://openssh.ca/dashboard.html) or use the mobile app.
+Register with your email and password.
+
+### 2. Install the host daemon on your PC
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/AmritRai1234/Openssh/main/install.sh | bash -s -- --relay relay.openssh.ca:2222
+```
+
+### 3. SSH from anywhere
+
+Open the dashboard or mobile app → your PC appears → tap to connect. Full terminal, file browser — done.
 
 ---
 
 ## Architecture
 
-The project has three components:
-
-| Crate | What it does |
-|---|---|
-| `relay` | Cloud relay server — hosts connect to it, phones communicate through it |
-| `host` | Daemon that runs on your PC, connects outward to the relay |
-| `app` | React Native mobile app (Expo) |
-
----
-
-## Getting Started
-
-### Prerequisites
-
-- [Rust](https://rustup.rs/) (for building relay + host)
-- [Node.js](https://nodejs.org/) + [Expo Go](https://expo.dev/go) (for the mobile app)
-- A Linux/macOS machine to SSH into
-- *(Optional but recommended)* A VPS for the relay so it works over the internet
+| Component | Stack | Description |
+|-----------|-------|-------------|
+| **Relay** | Rust (Axum, Russh, Tokio) | Multi-tenant relay server — bridges phone/browser ↔ PC |
+| **Host daemon** | Rust | Runs on your PC, connects outward to relay via SSH |
+| **Web dashboard** | HTML/JS, xterm.js | Browser-based terminal at openssh.ca/dashboard.html |
+| **Mobile app** | React Native (Expo) | Android/iOS SSH terminal |
+| **Landing page** | HTML/CSS | Marketing site at openssh.ca |
 
 ---
 
-## 1. Build the Relay
+## Self-Hosting
 
-The relay is the bridge between your phone and your PC.
+The entire project is open source. Run your own relay for free.
+
+### Docker (recommended)
 
 ```bash
-# Clone the repo
 git clone https://github.com/AmritRai1234/Openssh.git
 cd Openssh
-
-# Build in release mode
-cargo build --release -p relay
+docker compose up -d
 ```
 
-### Run locally (same network only)
+This starts the relay on:
+- **Port 8080** — HTTP API + website
+- **Port 2222** — SSH relay (host daemons connect here)
+
+### From source
 
 ```bash
+# Build
+cargo build --release -p relay
+
+# Run
 cargo run -p relay -- \
   --bind 0.0.0.0:2222 \
   --api-bind 0.0.0.0:8080 \
   --host-key ./host.key
 ```
 
-On startup the relay prints a **QR code** containing the API URL and token — you'll scan this with the app.
-
-### Run on a VPS (works from anywhere)
+### Host daemon (on your PC)
 
 ```bash
-# On your VPS (e.g. DigitalOcean, Linode — $5/mo)
-./relay \
-  --bind 0.0.0.0:2222 \
-  --api-bind 0.0.0.0:8080 \
-  --host-key ./host.key \
-  --public-url http://<YOUR_VPS_IP>:8080
-```
-
-> **Firewall:** Open ports `2222` (SSH/host connections) and `8080` (API/phone connections) on your VPS.
-
----
-
-## 2. Start the Host Daemon
-
-The host daemon runs on the machine you want to SSH into. It connects *outward* to the relay — no inbound firewall rules needed.
-
-```bash
-# Build
 cargo build --release -p host
-
-# Run (replace relay address with your relay's address)
-cargo run -p host -- my-laptop --relay 127.0.0.1:2222
-```
-
-- `my-laptop` — the name that appears in the app
-- `--relay` — address of the relay server
-
-The host daemon automatically reconnects if the relay restarts.
-
----
-
-## 3. Set Up the Mobile App
-
-### Install dependencies
-
-```bash
-cd app
-npm install
-```
-
-### Run with Expo Go
-
-```bash
-npx expo start
-```
-
-Scan the QR code with **Expo Go** on your Android phone.
-
-### Connect to your relay
-
-When the app opens:
-
-1. Tap **Scan Relay QR Code**
-2. Point the camera at the QR code printed by the relay on startup
-3. The app auto-fills the relay URL and API token
-4. Tap **Connect & Save**
-
-> **Alternative:** Enter the relay URL and API token manually if QR scanning isn't available.
-
-Once connected, your machine appears in the dashboard. Tap it to open a terminal.
-
----
-
-## Using the Terminal
-
-- The **command bar** is at the top — type your command and press ↵ to run
-- Output appears below, newest at the top
-- Scroll down to read older output — the app won't interrupt you while reading history
-- The connection **auto-reconnects** if the network drops temporarily
-- Tap **‹** to go back to the dashboard
-
----
-
-## Building a Standalone APK
-
-To use the app without Expo Go, build a standalone APK:
-
-```bash
-cd app
-
-# Install EAS CLI
-npm install -g eas-cli
-
-# Log in to Expo
-eas login
-
-# Configure
-eas build:configure
-
-# Build APK for Android
-eas build --platform android --profile preview
+cargo run -p host -- my-laptop --relay YOUR_RELAY_IP:2222
 ```
 
 ---
@@ -172,74 +101,74 @@ eas build --platform android --profile preview
 
 ```
 openssh/
-├── relay/          # Rust relay server
+├── relay/          # Rust relay server + SQLite user DB
 │   └── src/
-│       └── main.rs
+│       ├── main.rs     # API, SSH, WebSocket, static files
+│       └── db.rs       # Users, tokens, host key pinning
 ├── host/           # Rust host daemon
+├── app/            # React Native mobile app (Expo)
 │   └── src/
-│       └── main.rs
-└── app/            # React Native mobile app (Expo)
-    ├── App.tsx
-    └── src/
-        ├── screens/
-        │   ├── DashboardScreen.tsx
-        │   ├── TerminalScreen.tsx
-        │   ├── HostDetailScreen.tsx
-        │   └── SetupScreen.tsx
-        ├── hooks/
-        │   └── useRelaySocket.ts
-        └── api/
-            └── relay.ts
+│       ├── screens/    # Auth, Dashboard, Terminal, Files
+│       └── api/        # Relay API client
+├── website/        # Landing page + web terminal dashboard
+│   ├── index.html
+│   ├── dashboard.html  # xterm.js web terminal
+│   └── style.css
+├── Dockerfile      # Multi-stage Rust build
+└── docker-compose.yml
 ```
 
 ---
 
-## Configuration
+## API Endpoints
 
-### Relay CLI flags
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/api/register` | POST | — | Create account (email, password, name) |
+| `/api/login` | POST | — | Login → returns API token |
+| `/api/account` | GET | Token | Get account info |
+| `/api/hosts` | GET | Token | List your connected machines |
+| `/api/terminal/:id` | WS | Token | Open terminal to a host |
+| `/api/events` | WS | Token | Real-time host connect/disconnect |
+| `/` | GET | — | Landing page |
+| `/dashboard.html` | GET | — | Web terminal |
+
+---
+
+## Pricing
+
+- **Self-host**: Free forever — clone, run, own your data
+- **Hosted relay** ([openssh.ca](https://openssh.ca)): Pay what you want via [Ko-fi](https://ko-fi.com/openssh)
+
+---
+
+## Relay CLI Flags
 
 | Flag | Default | Description |
-|---|---|---|
-| `--bind` | `0.0.0.0:2222` | Address for host daemon SSH connections |
-| `--api-bind` | `0.0.0.0:8080` | Address for phone API + WebSocket |
+|------|---------|-------------|
+| `--bind` | `0.0.0.0:2222` | SSH listen address (host daemons connect here) |
+| `--api-bind` | `0.0.0.0:8080` | HTTP API + website |
 | `--host-key` | required | Path to SSH host key (auto-generated if missing) |
-| `--public-url` | auto | Public URL encoded in the setup QR code |
-| `--token-file` | — | Read API token from file instead of generating |
-
-### Host daemon CLI flags
-
-| Flag | Description |
-|---|---|
-| `<name>` | Name shown in the app (e.g. `my-laptop`) |
-| `--relay` | Relay address (e.g. `1.2.3.4:2222`) |
-
----
-
-## Roadmap
-
-- [ ] PTY resize (so `vim`, `htop` work correctly on mobile)
-- [ ] ANSI colour support in terminal output
-- [ ] File browser UI for file transfers
-- [ ] Standalone APK / iOS build guide
-- [ ] Per-host SSH key pinning
-
----
-
-## Support the Project ☕
-
-The relay server costs ~$5/month to run on a VPS. If you find OpenSSH useful and want to help keep it online, a coffee goes a long way.
-
-**[☕ Buy me a coffee on Ko-fi](https://ko-fi.com/YOUR_NAME)**
-
-> Replace `YOUR_NAME` with your Ko-fi username, and update the badge at the top of this file too.
+| `--public-url` | auto | Public URL for the relay |
 
 ---
 
 ## Tech Stack
 
-- **Relay & Host** — Rust (`axum`, `russh`, `tokio`, `clap`)
-- **Mobile App** — React Native + Expo (TypeScript)
-- **Protocol** — WebSocket over HTTP API, SSH over TCP
+- **Rust** — relay server, host daemon (Axum, Russh, Tokio, SQLite)
+- **React Native** — mobile app (Expo, TypeScript)
+- **xterm.js** — web terminal
+- **WebSocket** — real-time terminal + events
+- **bcrypt + SHA-256** — password hashing + token auth
+- **TOFU** — SSH host key pinning
+
+---
+
+## Support the Project ☕
+
+If you use the hosted relay and find it useful, consider supporting the project:
+
+**[☕ Support on Ko-fi](https://ko-fi.com/openssh)**
 
 ---
 
