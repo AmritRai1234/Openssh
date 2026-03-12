@@ -1,0 +1,709 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OpenSSH — Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap"
+        rel="stylesheet">
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css">
+    <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: #0a0a0a;
+            color: #e5e5e5;
+            min-height: 100vh;
+        }
+
+        /* ── Nav ── */
+        .nav {
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            backdrop-filter: blur(20px);
+            background: rgba(10, 10, 10, 0.85);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+            padding: 0 2rem;
+        }
+
+        .nav-inner {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            height: 60px;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            text-decoration: none;
+            color: #fff;
+            font-weight: 700;
+            font-size: 1.1rem;
+        }
+
+        .logo-icon {
+            background: #fff;
+            color: #000;
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .nav-right {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .nav-user {
+            color: #888;
+            font-size: 0.85rem;
+        }
+
+        .btn-logout {
+            background: transparent;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            color: #ccc;
+            padding: 6px 14px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.8rem;
+            transition: all 0.2s;
+        }
+
+        .btn-logout:hover {
+            background: rgba(255, 255, 255, 0.08);
+            border-color: rgba(255, 255, 255, 0.3);
+        }
+
+        /* ── Auth Screen ── */
+        .auth-container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: calc(100vh - 60px);
+            padding: 2rem;
+        }
+
+        .auth-card {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 16px;
+            padding: 2.5rem;
+            width: 100%;
+            max-width: 400px;
+        }
+
+        .auth-card h2 {
+            font-size: 1.5rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .auth-card .subtitle {
+            color: #888;
+            font-size: 0.9rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .auth-tabs {
+            display: flex;
+            gap: 0;
+            margin-bottom: 1.5rem;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .auth-tab {
+            flex: 1;
+            padding: 8px;
+            text-align: center;
+            background: transparent;
+            border: none;
+            color: #888;
+            cursor: pointer;
+            font-size: 0.85rem;
+            transition: all 0.2s;
+        }
+
+        .auth-tab.active {
+            background: rgba(255, 255, 255, 0.1);
+            color: #fff;
+        }
+
+        .form-group {
+            margin-bottom: 1rem;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 0.8rem;
+            color: #888;
+            margin-bottom: 4px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 10px 14px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            color: #fff;
+            font-size: 0.95rem;
+            font-family: inherit;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .form-group input:focus {
+            border-color: rgba(255, 255, 255, 0.3);
+        }
+
+        .btn-submit {
+            width: 100%;
+            padding: 12px;
+            background: #fff;
+            color: #000;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.95rem;
+            font-weight: 600;
+            cursor: pointer;
+            margin-top: 0.5rem;
+            transition: opacity 0.2s;
+        }
+
+        .btn-submit:hover {
+            opacity: 0.9;
+        }
+
+        .btn-submit:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .auth-error {
+            color: #f87171;
+            font-size: 0.85rem;
+            margin-top: 0.75rem;
+            text-align: center;
+        }
+
+        /* ── Dashboard ── */
+        .dashboard {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        .dash-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 2rem;
+        }
+
+        .dash-header h1 {
+            font-size: 1.5rem;
+        }
+
+        .host-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 1rem;
+        }
+
+        .host-card {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 12px;
+            padding: 1.25rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .host-card:hover {
+            border-color: rgba(255, 255, 255, 0.2);
+            background: rgba(255, 255, 255, 0.06);
+            transform: translateY(-2px);
+        }
+
+        .host-top {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 10px;
+        }
+
+        .host-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.08);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .host-name {
+            font-weight: 600;
+            font-size: 1rem;
+        }
+
+        .host-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.8rem;
+            color: #4ade80;
+        }
+
+        .host-status .dot {
+            width: 8px;
+            height: 8px;
+            background: #4ade80;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.5;
+            }
+        }
+
+        .host-meta {
+            color: #888;
+            font-size: 0.8rem;
+        }
+
+        .no-hosts {
+            text-align: center;
+            padding: 4rem 2rem;
+            color: #888;
+        }
+
+        .no-hosts h3 {
+            color: #ccc;
+            margin-bottom: 0.5rem;
+        }
+
+        .no-hosts code {
+            display: block;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            padding: 12px 16px;
+            margin-top: 1rem;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+            color: #4ade80;
+            word-break: break-all;
+        }
+
+        /* ── Terminal ── */
+        .terminal-view {
+            display: none;
+            flex-direction: column;
+            height: calc(100vh - 60px);
+        }
+
+        .terminal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 1.5rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        .terminal-header-left {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .btn-back {
+            background: transparent;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            color: #ccc;
+            padding: 6px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.8rem;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.2s;
+        }
+
+        .btn-back:hover {
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        .terminal-host-name {
+            font-weight: 600;
+            font-size: 0.95rem;
+        }
+
+        .terminal-status {
+            font-size: 0.8rem;
+            color: #4ade80;
+        }
+
+        #terminal-container {
+            flex: 1;
+            padding: 4px;
+        }
+
+        .loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 3rem;
+            color: #888;
+        }
+
+        .spinner {
+            width: 20px;
+            height: 20px;
+            border: 2px solid rgba(255, 255, 255, 0.1);
+            border-top-color: #fff;
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+            margin-right: 10px;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Nav -->
+    <nav class="nav">
+        <div class="nav-inner">
+            <a href="/" class="logo">
+                <span class="logo-icon"><i data-lucide="terminal" style="width:18px;height:18px;color:#000"></i></span>
+                <span>OpenSSH</span>
+            </a>
+            <div class="nav-right" id="nav-right">
+                <!-- Filled by JS -->
+            </div>
+        </div>
+    </nav>
+
+    <!-- Auth Screen -->
+    <div id="auth-screen" class="auth-container">
+        <div class="auth-card">
+            <h2>Welcome back</h2>
+            <p class="subtitle">Sign in to access your machines</p>
+            <div class="auth-tabs">
+                <button class="auth-tab active" onclick="switchTab('login')">Login</button>
+                <button class="auth-tab" onclick="switchTab('register')">Register</button>
+            </div>
+            <form id="auth-form" onsubmit="handleAuth(event)">
+                <div class="form-group">
+                    <label>Relay URL</label>
+                    <input type="text" id="relay-url" value="" placeholder="http://relay.openssh.ca:9090" required>
+                </div>
+                <div class="form-group" id="name-group" style="display:none">
+                    <label>Name</label>
+                    <input type="text" id="auth-name" placeholder="Your name">
+                </div>
+                <div class="form-group">
+                    <label>Email</label>
+                    <input type="email" id="auth-email" placeholder="you@example.com" required>
+                </div>
+                <div class="form-group">
+                    <label>Password</label>
+                    <input type="password" id="auth-password" placeholder="••••••••" required>
+                </div>
+                <button type="submit" class="btn-submit" id="auth-btn">Sign In</button>
+                <div class="auth-error" id="auth-error"></div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Dashboard -->
+    <div id="dashboard-screen" class="dashboard" style="display:none">
+        <div class="dash-header">
+            <h1>Your Machines</h1>
+            <button class="btn-logout" onclick="refreshHosts()">
+                <i data-lucide="refresh-cw" style="width:14px;height:14px;vertical-align:-2px"></i> Refresh
+            </button>
+        </div>
+        <div id="host-list" class="host-grid"></div>
+    </div>
+
+    <!-- Terminal -->
+    <div id="terminal-screen" class="terminal-view">
+        <div class="terminal-header">
+            <div class="terminal-header-left">
+                <button class="btn-back" onclick="closeTerminal()">
+                    <i data-lucide="arrow-left" style="width:14px;height:14px"></i> Back
+                </button>
+                <span class="terminal-host-name" id="term-host-name"></span>
+            </div>
+            <span class="terminal-status" id="term-status">Connecting...</span>
+        </div>
+        <div id="terminal-container"></div>
+    </div>
+
+    <script>
+        // ── State ──
+        let state = {
+            mode: 'login', // login or register
+            relayUrl: localStorage.getItem('relay_url') || '',
+            token: localStorage.getItem('api_token') || '',
+            email: localStorage.getItem('user_email') || '',
+            hosts: [],
+            term: null,
+            ws: null,
+            fitAddon: null,
+        };
+
+        // ── Init ──
+        document.getElementById('relay-url').value = state.relayUrl;
+        if (state.token && state.relayUrl) {
+            showDashboard();
+        }
+        lucide.createIcons();
+
+        // ── Auth ──
+        function switchTab(tab) {
+            state.mode = tab;
+            document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active'));
+            event.target.classList.add('active');
+            document.getElementById('name-group').style.display = tab === 'register' ? 'block' : 'none';
+            document.getElementById('auth-btn').textContent = tab === 'login' ? 'Sign In' : 'Create Account';
+            document.getElementById('auth-error').textContent = '';
+        }
+
+        async function handleAuth(e) {
+            e.preventDefault();
+            const btn = document.getElementById('auth-btn');
+            const errEl = document.getElementById('auth-error');
+            errEl.textContent = '';
+            btn.disabled = true;
+            btn.textContent = 'Connecting...';
+
+            const relayUrl = document.getElementById('relay-url').value.replace(/\/$/, '');
+            const email = document.getElementById('auth-email').value;
+            const password = document.getElementById('auth-password').value;
+            const name = document.getElementById('auth-name').value;
+
+            const endpoint = state.mode === 'login' ? '/api/login' : '/api/register';
+            const body = state.mode === 'login'
+                ? { email, password }
+                : { email, password, name };
+
+            try {
+                const res = await fetch(`${relayUrl}${endpoint}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body),
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'Authentication failed');
+
+                state.relayUrl = relayUrl;
+                state.token = data.token;
+                state.email = email;
+                localStorage.setItem('relay_url', relayUrl);
+                localStorage.setItem('api_token', data.token);
+                localStorage.setItem('user_email', email);
+                showDashboard();
+            } catch (err) {
+                errEl.textContent = err.message;
+            } finally {
+                btn.disabled = false;
+                btn.textContent = state.mode === 'login' ? 'Sign In' : 'Create Account';
+            }
+        }
+
+        // ── Dashboard ──
+        async function showDashboard() {
+            document.getElementById('auth-screen').style.display = 'none';
+            document.getElementById('dashboard-screen').style.display = 'block';
+            document.getElementById('terminal-screen').style.display = 'none';
+            document.getElementById('nav-right').innerHTML = `
+                <span class="nav-user">${state.email}</span>
+                <button class="btn-logout" onclick="logout()">Logout</button>
+            `;
+            lucide.createIcons();
+            await refreshHosts();
+        }
+
+        async function refreshHosts() {
+            const list = document.getElementById('host-list');
+            list.innerHTML = '<div class="loading"><div class="spinner"></div> Loading hosts...</div>';
+
+            try {
+                const res = await fetch(`${state.relayUrl}/api/hosts`, {
+                    headers: { 'Authorization': `Bearer ${state.token}` },
+                });
+                if (res.status === 401) { logout(); return; }
+                const data = await res.json();
+                state.hosts = data.hosts || [];
+                renderHosts();
+            } catch (err) {
+                list.innerHTML = `<div class="no-hosts"><h3>Connection Error</h3><p>Could not reach ${state.relayUrl}</p></div>`;
+            }
+        }
+
+        function renderHosts() {
+            const list = document.getElementById('host-list');
+            if (state.hosts.length === 0) {
+                list.innerHTML = `
+                    <div class="no-hosts">
+                        <h3>No machines connected</h3>
+                        <p>Install the host daemon on your PC to get started:</p>
+                        <code>curl -fsSL https://raw.githubusercontent.com/AmritRai1234/Openssh/main/install.sh | bash -s -- --relay relay.openssh.ca:2222</code>
+                    </div>`;
+                return;
+            }
+            list.innerHTML = state.hosts.map(h => `
+                <div class="host-card" onclick="openTerminal('${h.id}', '${h.id}')">
+                    <div class="host-top">
+                        <div class="host-icon"><i data-lucide="monitor" style="width:20px;height:20px;color:#ccc"></i></div>
+                        <div>
+                            <div class="host-name">${h.id}</div>
+                            <div class="host-status"><span class="dot"></span> Online</div>
+                        </div>
+                    </div>
+                    <div class="host-meta">Click to open terminal</div>
+                </div>
+            `).join('');
+            lucide.createIcons();
+        }
+
+        // ── Terminal ──
+        function openTerminal(hostId, hostName) {
+            document.getElementById('dashboard-screen').style.display = 'none';
+            document.getElementById('terminal-screen').style.display = 'flex';
+            document.getElementById('term-host-name').textContent = hostName;
+            document.getElementById('term-status').textContent = 'Connecting...';
+
+            // Clean up old terminal
+            if (state.ws) { state.ws.close(); state.ws = null; }
+            if (state.term) { state.term.dispose(); state.term = null; }
+            document.getElementById('terminal-container').innerHTML = '';
+
+            // Create xterm
+            const term = new Terminal({
+                fontFamily: "'JetBrains Mono', monospace",
+                fontSize: 14,
+                theme: {
+                    background: '#0a0a0a',
+                    foreground: '#e5e5e5',
+                    cursor: '#fff',
+                    selectionBackground: 'rgba(255,255,255,0.2)',
+                },
+                cursorBlink: true,
+                allowProposedApi: true,
+            });
+            const fitAddon = new FitAddon.FitAddon();
+            term.loadAddon(fitAddon);
+            term.open(document.getElementById('terminal-container'));
+            fitAddon.fit();
+            state.term = term;
+            state.fitAddon = fitAddon;
+
+            // WebSocket
+            const wsUrl = state.relayUrl.replace(/^http/, 'ws');
+            const ws = new WebSocket(`${wsUrl}/api/terminal/${hostId}?token=${state.token}&cols=${term.cols}&rows=${term.rows}`);
+            state.ws = ws;
+
+            ws.binaryType = 'arraybuffer';
+
+            ws.onopen = () => {
+                document.getElementById('term-status').textContent = 'Connected';
+                document.getElementById('term-status').style.color = '#4ade80';
+                term.focus();
+            };
+
+            ws.onmessage = (event) => {
+                if (event.data instanceof ArrayBuffer) {
+                    term.write(new Uint8Array(event.data));
+                } else {
+                    term.write(event.data);
+                }
+            };
+
+            ws.onerror = () => {
+                document.getElementById('term-status').textContent = 'Error';
+                document.getElementById('term-status').style.color = '#f87171';
+            };
+
+            ws.onclose = () => {
+                document.getElementById('term-status').textContent = 'Disconnected';
+                document.getElementById('term-status').style.color = '#888';
+                term.write('\r\n\x1b[90m── Connection closed ──\x1b[0m\r\n');
+            };
+
+            term.onData(data => {
+                if (ws.readyState === WebSocket.OPEN) {
+                    ws.send(data);
+                }
+            });
+
+            // Handle resize
+            window.addEventListener('resize', () => {
+                fitAddon.fit();
+                if (ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
+                }
+            });
+        }
+
+        function closeTerminal() {
+            if (state.ws) { state.ws.close(); state.ws = null; }
+            if (state.term) { state.term.dispose(); state.term = null; }
+            showDashboard();
+        }
+
+        function logout() {
+            localStorage.removeItem('api_token');
+            localStorage.removeItem('user_email');
+            state.token = '';
+            state.email = '';
+            document.getElementById('auth-screen').style.display = 'flex';
+            document.getElementById('dashboard-screen').style.display = 'none';
+            document.getElementById('terminal-screen').style.display = 'none';
+            document.getElementById('nav-right').innerHTML = '';
+        }
+    </script>
+</body>
+
+</html>
