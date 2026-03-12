@@ -57,3 +57,38 @@ export function createEventSocket(url: string, token: string, onEvent: (ev: obje
   return ws;
 }
 
+// ── Auth endpoints ──────────────────────────────────────
+
+export interface AuthResponse {
+  user_id: string;
+  token: string;
+  relay_addr: string;
+}
+
+export async function register(relayUrl: string, email: string, password: string, name?: string): Promise<AuthResponse> {
+  const res = await fetch(`${relayUrl}/api/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password, name: name || '' }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+  return data;
+}
+
+export async function login(relayUrl: string, email: string, password: string): Promise<AuthResponse> {
+  const res = await fetch(`${relayUrl}/api/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+  return data;
+}
+
+export async function fetchAccount(): Promise<{ id: string; email: string; name: string; plan: string; max_hosts: number; host_count: number }> {
+  const r = await apiFetch('/api/account');
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return r.json();
+}

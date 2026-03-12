@@ -11,9 +11,10 @@ interface Props {
     host: HostInfo;
     onBack: () => void;
     onTerminal: (host: HostInfo) => void;
+    onFiles?: (host: HostInfo) => void;
 }
 
-export default function HostDetailScreen({ host, onBack, onTerminal }: Props) {
+export default function HostDetailScreen({ host, onBack, onTerminal, onFiles }: Props) {
     const [pair, setPair] = useState<PairInfo | null>(null);
     const [loading, setLoading] = useState(true);
     const [copied, setCopied] = useState(false);
@@ -63,6 +64,10 @@ export default function HostDetailScreen({ host, onBack, onTerminal }: Props) {
                     <TouchableOpacity style={[styles.actionBtn, styles.terminalBtn]} onPress={() => onTerminal(host)}>
                         <Ionicons name="terminal-outline" size={24} color="#FFF" style={styles.actionIcon} />
                         <Text style={[styles.actionLabel, { color: '#FFF' }]}>Terminal</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={[styles.actionBtn, styles.secondaryBtn]} onPress={() => onFiles?.(host)}>
+                        <Ionicons name="folder-outline" size={24} color="#5865F2" style={styles.actionIcon} />
+                        <Text style={[styles.actionLabel, { color: '#5865F2' }]}>Files</Text>
                     </TouchableOpacity>
                     <TouchableOpacity style={[styles.actionBtn, styles.secondaryBtn]} onPress={copy}>
                         <Ionicons name={copied ? 'checkmark-circle-outline' : 'copy-outline'} size={24} color={copied ? '#34C759' : '#1C1C1E'} style={styles.actionIcon} />

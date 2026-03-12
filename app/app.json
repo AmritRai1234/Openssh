@@ -3,7 +3,8 @@
     "name": "OpenSSH",
     "slug": "openssh",
     "version": "1.0.0",
-    "orientation": "portrait",
+    "description": "SSH into any machine from your phone — no port forwarding, no VPN. Connect through a smart relay from anywhere.",
+    "orientation": "default",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "splash": {
@@ -33,8 +34,9 @@
     },
     "extra": {
       "eas": {
-        "projectId": "YOUR_EAS_PROJECT_ID"
+        "projectId": "2f5cd8d0-a002-45d5-be05-8f6eae3a9d5b"
       }
-    }
+    },
+    "owner": "amritrai"
   }
 }

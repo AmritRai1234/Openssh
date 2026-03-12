@@ -1,5 +1,5 @@
 # ── Stage 1: Build ────────────────────────────────────────────────
-FROM rust:1.76 AS builder
+FROM rust:1.82 AS builder
 WORKDIR /app
 
 # Install system deps needed by russh / ring / openssl crates

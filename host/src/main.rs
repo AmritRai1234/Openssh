@@ -191,8 +191,23 @@ impl Handler for ClientHandler {
 }
 
 // ─────────────────────────────────────────────
-//  Shell handler (PTY)
+//  Shell handler (PTY) – with resize support
 // ─────────────────────────────────────────────
+
+/// Try to parse a JSON resize control message: `{"resize":[cols,rows]}`
+/// Returns Some((cols, rows)) on success, None if it's not a resize message.
+fn try_parse_resize(data: &[u8]) -> Option<(u16, u16)> {
+    // Quick check: must start with '{' (skip whitespace)
+    let s = std::str::from_utf8(data).ok()?.trim();
+    if !s.starts_with('{') { return None; }
+    let v: serde_json::Value = serde_json::from_str(s).ok()?;
+    let arr = v.get("resize")?.as_array()?;
+    if arr.len() != 2 { return None; }
+    let cols = arr[0].as_u64()? as u16;
+    let rows = arr[1].as_u64()? as u16;
+    if cols > 0 && rows > 0 { Some((cols, rows)) } else { None }
+}
+
 async fn handle_pty_shell(channel: Channel<russh::client::Msg>) {
     info!("Starting PTY shell");
     let pty_system = NativePtySystem::default();
@@ -206,19 +221,16 @@ async fn handle_pty_shell(channel: Channel<russh::client::Msg>) {
         Err(e) => { error!("openpty failed: {}", e); return; }
     };
     #[cfg(target_os = "windows")]
-    let mut cmd = {
+    let cmd = {
         let mut c = CommandBuilder::new("cmd.exe");
-        c.arg("/K"); // keep cmd open after each command
+        c.arg("/K");
         c
     };
     #[cfg(not(target_os = "windows"))]
-    let mut cmd = {
+    let cmd = {
         let mut c = CommandBuilder::new("bash");
-        // Suppress ANSI colour codes — our terminal strips them client-side,
-        // but TERM=dumb / NO_COLOR stops bash/ls emitting them in the first place.
-        c.env("TERM", "dumb");
-        c.env("NO_COLOR", "1");
-        c.env("LS_COLORS", "");
+        // Enable full colour support — ANSI codes are now rendered on the client
+        c.env("TERM", "xterm-256color");
         c
     };
     if let Err(e) = pair.slave.spawn_command(cmd) {
@@ -229,8 +241,12 @@ async fn handle_pty_shell(channel: Channel<russh::client::Msg>) {
 
     let mut master_reader = pair.master.try_clone_reader().unwrap();
     let mut master_writer = pair.master.take_writer().unwrap();
+    // Keep master handle for resizing only
+    let master_for_resize = Arc::new(std::sync::Mutex::new(pair.master));
+
     let (mut channel_rx, mut channel_tx) = tokio::io::split(channel.into_stream());
 
+    // PTY stdout → SSH channel
     let pty_to_channel = tokio::task::spawn_blocking(move || {
         let mut buf = [0u8; 4096];
         let rt = tokio::runtime::Handle::current();
@@ -245,6 +261,7 @@ async fn handle_pty_shell(channel: Channel<russh::client::Msg>) {
         }
     });
 
+    // SSH channel → PTY stdin (with resize detection)
     let (tx, mut rx) = tokio::sync::mpsc::channel::<Vec<u8>>(32);
     let channel_to_pty = tokio::spawn(async move {
         let mut buf = [0u8; 4096];
@@ -252,7 +269,24 @@ async fn handle_pty_shell(channel: Channel<russh::client::Msg>) {
             match channel_rx.read(&mut buf).await {
                 Ok(0) | Err(_) => break,
                 Ok(n) => {
-                    if tx.send(buf[..n].to_vec()).await.is_err() { break; }
+                    let data = buf[..n].to_vec();
+                    // Check for resize control message
+                    if let Some((cols, rows)) = try_parse_resize(&data) {
+                        info!("PTY resize → {}×{}", cols, rows);
+                        let m = master_for_resize.clone();
+                        let _ = tokio::task::spawn_blocking(move || {
+                            if let Ok(guard) = m.lock() {
+                                let _ = guard.resize(PtySize {
+                                    rows,
+                                    cols,
+                                    pixel_width: 0,
+                                    pixel_height: 0,
+                                });
+                            }
+                        }).await;
+                        continue; // don't forward resize JSON to the shell
+                    }
+                    if tx.send(data).await.is_err() { break; }
                 }
             }
         }

@@ -11,7 +11,7 @@ services:
       # Set this to your public domain/IP so QR codes work from outside
       PUBLIC_URL: ${PUBLIC_URL:-}
     healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:8080/api/status" ]
+      test: [ "CMD", "curl", "-sf", "-o", "/dev/null", "-X", "POST", "-H", "Content-Type: application/json", "-d", "{}", "http://localhost:8080/api/register" ]
       interval: 30s
       timeout: 5s
       retries: 3

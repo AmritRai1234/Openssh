@@ -1,3 +1,5 @@
+mod db;
+
 use anyhow::Result;
 use async_trait::async_trait;
 use axum::{
@@ -22,6 +24,31 @@ use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tokio::sync::{broadcast, Mutex};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+/// Hash a string with SHA-256 and return the hex digest
+fn sha256_hex(input: &str) -> String {
+    use sha2::{Digest, Sha256};
+    hex::encode(Sha256::digest(input.as_bytes()))
+}
+
+/// Load pinned keys from disk
+fn load_pinned_keys(path: &str) -> HashMap<String, String> {
+    if let Ok(data) = std::fs::read_to_string(path) {
+        serde_json::from_str(&data).unwrap_or_default()
+    } else {
+        HashMap::new()
+    }
+}
+
+/// Save pinned keys to disk
+fn save_pinned_keys(path: &str, keys: &HashMap<String, String>) {
+    if let Ok(json) = serde_json::to_string_pretty(keys) {
+        if let Some(p) = std::path::Path::new(path).parent() {
+            let _ = std::fs::create_dir_all(p);
+        }
+        let _ = std::fs::write(path, json);
+    }
+}
 
 // ─────────────────────────────────────────────────────────
 //  CLI
@@ -79,8 +106,13 @@ struct AppState {
     host_registry: HostRegistry,
     key_registry: KeyRegistry,
     events_tx: broadcast::Sender<String>,
-    api_token: String,
+    db: Arc<db::Db>,
+    admin_token_hash: String,  // CLI admin token (backward compat)
     relay_addr: String,
+    pinned_keys_path: String,
+    api_rate_limiter: Arc<RateLimiter>,
+    /// Runtime map: host_id → user_id (tracks which user owns each connected host)
+    host_owners: Arc<Mutex<HashMap<String, String>>>,
 }
 
 // ─────────────────────────────────────────────────────────
@@ -155,28 +187,83 @@ impl russh::server::Handler for SessionHandler {
             warn!("Rate limited {:?}", self.peer_addr);
             return Ok(Auth::Reject { proceed_with_methods: None });
         }
-        let (role, id) = if let Some(id) = user.strip_prefix("host:") { ("host", id) }
-            else if let Some(id) = user.strip_prefix("client:") { ("client", id) }
-            else { return Ok(Auth::Reject { proceed_with_methods: None }); };
 
-        if id.is_empty() || id.len() > 64 || !id.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_') {
-            return Ok(Auth::Reject { proceed_with_methods: None });
-        }
         let fp = fingerprint(public_key);
-        let registry_key = format!("{}:{}", role, id);
-        {
-            let mut reg = self.state.key_registry.lock().await;
-            match reg.get(&registry_key) {
-                Some(pinned) => if *pinned != fp {
-                    warn!("Key mismatch for {}", registry_key);
+
+        // Parse role and identity: host:<user_id>/<host_name> or client:<user_id>/<host_name>
+        // Also support legacy format: host:<id> / client:<id>
+        if let Some(rest) = user.strip_prefix("host:") {
+            self.is_host = true;
+
+            if let Some((user_id, host_name)) = rest.split_once('/') {
+                // Multi-tenant format: host:<user_id>/<host_name>
+                if host_name.is_empty() || host_name.len() > 64 {
                     return Ok(Auth::Reject { proceed_with_methods: None });
-                },
-                None => { reg.insert(registry_key.clone(), fp); }
+                }
+
+                // Check host limit
+                let current = self.state.db.count_user_hosts(user_id).await;
+                let max = self.state.db.max_hosts(user_id).await;
+
+                // Pin key in DB (TOFU)
+                match self.state.db.pin_host_key(user_id, host_name, &fp).await {
+                    Ok(true) => {
+                        if current >= max {
+                            warn!("User {} exceeded max_hosts ({})", user_id, max);
+                            return Ok(Auth::Reject { proceed_with_methods: None });
+                        }
+                        info!("TOFU: pinned key for {}/{}", user_id, host_name);
+                    }
+                    Ok(false) => {} // already pinned, matches
+                    Err(e) => {
+                        warn!("Key pin rejected: {}", e);
+                        return Ok(Auth::Reject { proceed_with_methods: None });
+                    }
+                }
+
+                // Use compound ID for runtime maps
+                let compound_id = format!("{}/{}", user_id, host_name);
+                self.id = Some(compound_id.clone());
+                // Track ownership
+                self.state.host_owners.lock().await.insert(compound_id, user_id.to_string());
+            } else {
+                // Legacy single-name format: host:<id>
+                let id = rest;
+                if id.is_empty() || id.len() > 64 || !id.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_') {
+                    return Ok(Auth::Reject { proceed_with_methods: None });
+                }
+                let registry_key = format!("host:{}", id);
+                {
+                    let mut reg = self.state.key_registry.lock().await;
+                    match reg.get(&registry_key) {
+                        Some(pinned) => if *pinned != fp {
+                            warn!("Key mismatch for {}", registry_key);
+                            return Ok(Auth::Reject { proceed_with_methods: None });
+                        },
+                        None => {
+                            reg.insert(registry_key.clone(), fp);
+                            save_pinned_keys(&self.state.pinned_keys_path, &reg);
+                        }
+                    }
+                }
+                self.id = Some(id.to_string());
             }
+
+            return Ok(Auth::Accept);
         }
-        self.is_host = role == "host";
-        self.id = Some(id.to_string());
-        Ok(Auth::Accept)
+
+        if let Some(rest) = user.strip_prefix("client:") {
+            self.is_host = false;
+            // Client can be <user_id>/<host_name> or just <host_name>
+            let id = rest.to_string();
+            if id.is_empty() || id.len() > 128 {
+                return Ok(Auth::Reject { proceed_with_methods: None });
+            }
+            self.id = Some(id);
+            return Ok(Auth::Accept);
+        }
+
+        Ok(Auth::Reject { proceed_with_methods: None })
     }
 
     async fn auth_succeeded(&mut self, session: &mut Session) -> Result<(), Self::Error> {
@@ -247,6 +334,7 @@ impl Drop for SessionHandler {
                 tokio::spawn(async move {
                     state.host_handles.lock().await.remove(&id);
                     state.host_registry.lock().await.remove(&id);
+                    state.host_owners.lock().await.remove(&id);
                     let evt = serde_json::to_string(&json!({ "event": "disconnected", "id": id })).unwrap_or_default();
                     let _ = state.events_tx.send(evt);
                     info!("Host '{}' disconnected", id);
@@ -257,34 +345,151 @@ impl Drop for SessionHandler {
 }
 
 // ─────────────────────────────────────────────────────────
-//  Auth middleware helper
+//  Auth middleware helper — returns user_id if authenticated
 // ─────────────────────────────────────────────────────────
-fn check_token(headers: &HeaderMap, expected: &str) -> bool {
+
+/// Extract raw token from Authorization header
+fn extract_token(headers: &HeaderMap) -> Option<String> {
     headers.get("Authorization")
         .and_then(|v| v.to_str().ok())
         .and_then(|v| v.strip_prefix("Bearer "))
-        .map(|t| t == expected)
-        .unwrap_or(false)
+        .map(|s| s.to_string())
 }
 
-/// Accept token from Authorization header OR ?token= query param (needed for WebSocket clients
-/// that cannot set headers, e.g. React Native's built-in WebSocket).
-fn check_auth(headers: &HeaderMap, params: &HashMap<String, String>, expected: &str) -> bool {
-    check_token(headers, expected)
-        || params.get("token").map(|t| t.as_str() == expected).unwrap_or(false)
+/// Check token against DB or admin token. Returns user_id ("admin" for admin token).
+async fn resolve_user(headers: &HeaderMap, state: &AppState) -> Option<String> {
+    if let Some(raw) = extract_token(headers) {
+        // Check admin token first
+        if sha256_hex(&raw) == state.admin_token_hash {
+            return Some("admin".to_string());
+        }
+        // Check DB
+        return state.db.lookup_token(&raw).await;
+    }
+    None
+}
+
+/// Check token from headers or query params. Returns user_id.
+async fn resolve_user_ws(headers: &HeaderMap, params: &HashMap<String, String>, state: &AppState) -> Option<String> {
+    if let Some(uid) = resolve_user(headers, state).await {
+        return Some(uid);
+    }
+    if let Some(raw) = params.get("token") {
+        if sha256_hex(raw) == state.admin_token_hash {
+            return Some("admin".to_string());
+        }
+        return state.db.lookup_token(raw).await;
+    }
+    None
 }
 
 // ─────────────────────────────────────────────────────────
 //  HTTP API handlers
 // ─────────────────────────────────────────────────────────
 
-/// GET /api/hosts — list connected hosts
-async fn api_hosts(headers: HeaderMap, State(state): State<AppState>) -> Response {
-    if !check_token(&headers, &state.api_token) {
-        return (StatusCode::UNAUTHORIZED, Json(json!({"error":"Unauthorized"}))).into_response();
+/// POST /api/register — create a new user account
+async fn api_register(
+    State(state): State<AppState>,
+    Json(body): Json<serde_json::Value>,
+) -> Response {
+    let email = body.get("email").and_then(|v| v.as_str()).unwrap_or("");
+    let password = body.get("password").and_then(|v| v.as_str()).unwrap_or("");
+    let name = body.get("name").and_then(|v| v.as_str()).unwrap_or("");
+
+    if email.is_empty() || !email.contains('@') || password.len() < 6 {
+        return (StatusCode::BAD_REQUEST, Json(json!({
+            "error": "Email must be valid and password must be at least 6 characters"
+        }))).into_response();
     }
+
+    match state.db.create_user(email, password, name).await {
+        Ok((user_id, token)) => Json(json!({
+            "user_id": user_id,
+            "token": token,
+            "relay_addr": state.relay_addr,
+        })).into_response(),
+        Err(e) => (StatusCode::CONFLICT, Json(json!({
+            "error": format!("{}", e)
+        }))).into_response(),
+    }
+}
+
+/// POST /api/login — authenticate and get a token
+async fn api_login(
+    State(state): State<AppState>,
+    Json(body): Json<serde_json::Value>,
+) -> Response {
+    let email = body.get("email").and_then(|v| v.as_str()).unwrap_or("");
+    let password = body.get("password").and_then(|v| v.as_str()).unwrap_or("");
+
+    match state.db.verify_login(email, password).await {
+        Ok(Some((user_id, token))) => Json(json!({
+            "user_id": user_id,
+            "token": token,
+            "relay_addr": state.relay_addr,
+        })).into_response(),
+        Ok(None) => (StatusCode::UNAUTHORIZED, Json(json!({
+            "error": "Invalid email or password"
+        }))).into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({
+            "error": format!("{}", e)
+        }))).into_response(),
+    }
+}
+
+/// GET /api/account — get current user profile
+async fn api_account(headers: HeaderMap, State(state): State<AppState>) -> Response {
+    let user_id = match resolve_user(&headers, &state).await {
+        Some(uid) => uid,
+        None => return (StatusCode::UNAUTHORIZED, Json(json!({"error":"Unauthorized"}))).into_response(),
+    };
+
+    if user_id == "admin" {
+        let count = state.host_handles.lock().await.len();
+        return Json(json!({
+            "id": "admin",
+            "email": "admin",
+            "plan": "admin",
+            "connected_hosts": count,
+        })).into_response();
+    }
+
+    match state.db.get_user(&user_id).await {
+        Some(user) => {
+            let host_count = state.db.count_user_hosts(&user_id).await;
+            Json(json!({
+                "id": user.id,
+                "email": user.email,
+                "name": user.name,
+                "plan": user.plan,
+                "max_hosts": user.max_hosts,
+                "host_count": host_count,
+            })).into_response()
+        }
+        None => (StatusCode::NOT_FOUND, Json(json!({"error":"User not found"}))).into_response(),
+    }
+}
+
+/// GET /api/hosts — list connected hosts (scoped to authenticated user)
+async fn api_hosts(headers: HeaderMap, State(state): State<AppState>) -> Response {
+    let user_id = match resolve_user(&headers, &state).await {
+        Some(uid) => uid,
+        None => return (StatusCode::UNAUTHORIZED, Json(json!({"error":"Unauthorized"}))).into_response(),
+    };
+
     let reg = state.host_registry.lock().await;
-    let hosts: Vec<&HostInfo> = reg.values().collect();
+    let owners = state.host_owners.lock().await;
+
+    let hosts: Vec<&HostInfo> = if user_id == "admin" {
+        // Admin sees all hosts
+        reg.values().collect()
+    } else {
+        // User sees only their own hosts
+        reg.values().filter(|h| {
+            owners.get(&h.id).map(|o| o == &user_id).unwrap_or(false)
+        }).collect()
+    };
+
     Json(json!({ "hosts": hosts })).into_response()
 }
 
@@ -294,16 +499,23 @@ async fn api_host_pair(
     Path(id): Path<String>,
     State(state): State<AppState>,
 ) -> Response {
-    if !check_token(&headers, &state.api_token) {
-        return (StatusCode::UNAUTHORIZED, Json(json!({"error":"Unauthorized"}))).into_response();
+    let user_id = match resolve_user(&headers, &state).await {
+        Some(uid) => uid,
+        None => return (StatusCode::UNAUTHORIZED, Json(json!({"error":"Unauthorized"}))).into_response(),
+    };
+
+    // Check ownership (admin can access any)
+    if user_id != "admin" {
+        let owners = state.host_owners.lock().await;
+        if owners.get(&id).map(|o| o != &user_id).unwrap_or(true) {
+            return (StatusCode::FORBIDDEN, Json(json!({"error":"Not your host"}))).into_response();
+        }
     }
+
     let reg = state.host_registry.lock().await;
     if let Some(info) = reg.get(&id) {
-        // We don't store the relay fp per-host here; use empty for now (client can TOFU)
         let pair_str = shared::qr::encode(&info.relay_addr, &id, "");
         drop(reg);
-
-        // Generate QR as PNG bytes, return as base64
         let qr_b64 = generate_qr_png_b64(&pair_str);
         Json(json!({
             "id": id,
@@ -335,25 +547,20 @@ fn generate_qr_png_b64(data: &str) -> String {
     }
 }
 
-/// GET /api/setup-qr — returns QR code PNG (base64) encoding relayUrl + token for phone setup.
-/// No auth required — the QR itself is the secret (contains the token).
-async fn api_setup_qr(State(state): State<AppState>) -> Response {
-    // Encode: "openssh://<relay_addr>?token=<token>"
-    let payload = format!("openssh://{}?token={}", state.relay_addr, state.api_token);
-    let qr_b64 = generate_qr_png_b64(&payload);
-    Json(json!({
-        "qr_png_base64": qr_b64,
-        "relay_url": format!("http://{}", state.relay_addr),
-        "token": state.api_token,
-    })).into_response()
-}
-
 /// GET /api/status
 async fn api_status(headers: HeaderMap, State(state): State<AppState>) -> Response {
-    if !check_token(&headers, &state.api_token) {
-        return (StatusCode::UNAUTHORIZED, Json(json!({"error":"Unauthorized"}))).into_response();
+    let user_id = match resolve_user(&headers, &state).await {
+        Some(uid) => uid,
+        None => return (StatusCode::UNAUTHORIZED, Json(json!({"error":"Unauthorized"}))).into_response(),
+    };
+
+    if user_id == "admin" {
+        let count = state.host_handles.lock().await.len();
+        return Json(json!({ "status": "ok", "connected_hosts": count })).into_response();
     }
-    let count = state.host_handles.lock().await.len();
+
+    let owners = state.host_owners.lock().await;
+    let count = owners.values().filter(|o| *o == &user_id).count();
     Json(json!({ "status": "ok", "connected_hosts": count })).into_response()
 }
 
@@ -364,14 +571,13 @@ async fn api_events(
     ws: WebSocketUpgrade,
     State(state): State<AppState>,
 ) -> Response {
-    if !check_auth(&headers, &params, &state.api_token) {
+    if resolve_user_ws(&headers, &params, &state).await.is_none() {
         return (StatusCode::UNAUTHORIZED, "Unauthorized").into_response();
     }
     ws.on_upgrade(move |socket| handle_ws(socket, state.events_tx.subscribe()))
 }
 
 async fn handle_ws(mut ws: WebSocket, mut rx: broadcast::Receiver<String>) {
-    // Send current hosts on connect would go here; for now just stream events
     loop {
         tokio::select! {
             msg = rx.recv() => {
@@ -400,8 +606,17 @@ async fn api_terminal(
     ws: WebSocketUpgrade,
     State(state): State<AppState>,
 ) -> Response {
-    if !check_auth(&headers, &params, &state.api_token) {
-        return (StatusCode::UNAUTHORIZED, Json(json!({"error": "Unauthorized"}))).into_response();
+    let user_id = match resolve_user_ws(&headers, &params, &state).await {
+        Some(uid) => uid,
+        None => return (StatusCode::UNAUTHORIZED, Json(json!({"error": "Unauthorized"}))).into_response(),
+    };
+
+    // Check ownership (admin can access any host)
+    if user_id != "admin" {
+        let owners = state.host_owners.lock().await;
+        if owners.get(&id).map(|o| o != &user_id).unwrap_or(true) {
+            return (StatusCode::FORBIDDEN, Json(json!({"error": "Not your host"}))).into_response();
+        }
     }
 
     // Grab the SSH handle for this host (clone so we can drop the lock)
@@ -462,7 +677,12 @@ async fn handle_terminal_ws(
             }
             msg = ws.recv() => {
                 match msg {
-                    Some(Ok(Message::Text(t)))   => { if ssh_tx.write_all(t.as_bytes()).await.is_err() { break; } }
+                    Some(Ok(Message::Text(t))) => {
+                        // Check if this is a resize control message — forward as-is
+                        // so the host daemon can parse and handle it
+                        let bytes = t.as_bytes();
+                        if ssh_tx.write_all(bytes).await.is_err() { break; }
+                    }
                     Some(Ok(Message::Binary(b))) => { if ssh_tx.write_all(&b).await.is_err() { break; } }
                     Some(Ok(Message::Close(_)))  => break,
                     None | Some(Err(_))          => break,
@@ -556,18 +776,34 @@ async fn main() -> Result<()> {
 
     let (events_tx, _) = broadcast::channel::<String>(256);
 
+    // Load previously pinned keys from disk (legacy support)
+    let pinned_keys_path = format!("{}_pinned_keys.json", cli.host_key);
+    let pinned_keys = load_pinned_keys(&pinned_keys_path);
+    info!("Loaded {} pinned keys from {}", pinned_keys.len(), pinned_keys_path);
+
+    // Open user database
+    let db_path = format!("{}_users.db", cli.host_key);
+    let db = db::Db::open(&db_path)?;
+    info!("User database: {}", db_path);
+
     let app_state = AppState {
         host_handles: Arc::new(Mutex::new(HashMap::new())),
         host_registry: Arc::new(Mutex::new(HashMap::new())),
-        key_registry: Arc::new(Mutex::new(HashMap::new())),
+        key_registry: Arc::new(Mutex::new(pinned_keys)),
         events_tx: events_tx.clone(),
-        api_token: api_token.clone(),
+        db,
+        admin_token_hash: sha256_hex(&api_token),
         relay_addr: cli.bind.clone(),
+        pinned_keys_path: pinned_keys_path.clone(),
+        api_rate_limiter: RateLimiter::new(60),
+        host_owners: Arc::new(Mutex::new(HashMap::new())),
     };
 
     // ── Axum HTTP API ─────────────────────────────────────
     let api_app = Router::new()
-        .route("/api/setup-qr", get(api_setup_qr))
+        .route("/api/register", axum::routing::post(api_register))
+        .route("/api/login", axum::routing::post(api_login))
+        .route("/api/account", get(api_account))
         .route("/api/status", get(api_status))
         .route("/api/hosts", get(api_hosts))
         .route("/api/host/{id}/pair", get(api_host_pair))

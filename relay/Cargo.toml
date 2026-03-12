@@ -28,3 +28,5 @@ base64 = "0.22.1"
 qrcode = "0.14.1"
 image = "0.25.9"
 serde = { workspace = true, features = ["derive"] }
+rusqlite = { version = "0.33", features = ["bundled"] }
+bcrypt = "0.16"
